@@ -75,6 +75,12 @@ def _request_json(url, token):
         ) from exc
 
 
+
+def _movie_details(movie_id, token, language):
+    params = {"language": language or "fr-FR", "append_to_response": "credits,external_ids"}
+    url = f"https://api.themoviedb.org/3/movie/{int(movie_id)}?" + urllib.parse.urlencode(params)
+    return _request_json(url, token)
+
 def _similarity(a, b):
     return SequenceMatcher(
         None,
@@ -193,6 +199,17 @@ def compare_movie(movie, token, language, rename_template):
 
     score, year, best = max(ranked, key=lambda item: item[0])
     title = best.get("title") or best.get("original_title")
+    try:
+        details = _movie_details(best.get("id"), token.strip(), language)
+    except Exception:
+        details = best
+    credits = details.get("credits") or {}
+    crew = credits.get("crew") or []
+    cast_items = credits.get("cast") or []
+    director = next((item.get("name") for item in crew if item.get("job") == "Director"), None)
+    cast = ", ".join(item.get("name") for item in cast_items[:8] if item.get("name"))
+    genres = ", ".join(item.get("name") for item in (details.get("genres") or []) if item.get("name"))
+    external = details.get("external_ids") or {}
     proposed = build_proposed_filename(
         title,
         year,
@@ -219,7 +236,15 @@ def compare_movie(movie, token, language, rename_template):
         "original_title": best.get("original_title"),
         "year": year,
         "score": round(score, 4),
-        "poster_path": best.get("poster_path"),
+        "poster_path": details.get("poster_path") or best.get("poster_path"),
+        "backdrop_path": details.get("backdrop_path") or best.get("backdrop_path"),
+        "overview": details.get("overview") or best.get("overview"),
+        "director": director,
+        "cast": cast,
+        "genres": genres,
+        "vote_average": details.get("vote_average") or best.get("vote_average"),
+        "release_date": details.get("release_date") or best.get("release_date"),
+        "imdb_id": external.get("imdb_id"),
         "comparison_status": status,
         "proposed_filename": proposed,
     }

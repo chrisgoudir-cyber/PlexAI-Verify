@@ -81,6 +81,15 @@ def init_database():
             "validation_score": "INTEGER",
             "validation_conflicts": "TEXT",
             "auto_correction_allowed": "INTEGER DEFAULT 0",
+            "tmdb_overview": "TEXT",
+            "tmdb_director": "TEXT",
+            "tmdb_cast": "TEXT",
+            "tmdb_genres": "TEXT",
+            "tmdb_vote_average": "REAL",
+            "tmdb_release_date": "TEXT",
+            "tmdb_backdrop": "TEXT",
+            "imdb_id": "TEXT",
+            "edition": "TEXT",
         }
         for name, definition in migrations.items():
             if name not in existing:
@@ -391,7 +400,9 @@ def update_tmdb(movie_id, r):
         conn.execute("""
         UPDATE movies SET
             tmdb_id=?,tmdb_title=?,tmdb_original_title=?,tmdb_year=?,
-            tmdb_score=?,tmdb_poster=?,comparison_status=?,
+            tmdb_score=?,tmdb_poster=?,tmdb_overview=?,tmdb_director=?,
+            tmdb_cast=?,tmdb_genres=?,tmdb_vote_average=?,tmdb_release_date=?,
+            tmdb_backdrop=?,imdb_id=?,comparison_status=?,
             proposed_filename=?,comparison_source='TMDb',comparison_score=?,
             analysis_state='tmdb_ok',
             last_error=NULL,updated=CURRENT_TIMESTAMP
@@ -399,7 +410,9 @@ def update_tmdb(movie_id, r):
         """, (
             r.get("tmdb_id"),r.get("title"),r.get("original_title"),
             r.get("year"),r.get("score"),r.get("poster_path"),
-            r.get("comparison_status"),r.get("proposed_filename"),
+            r.get("overview"),r.get("director"),r.get("cast"),r.get("genres"),
+            r.get("vote_average"),r.get("release_date"),r.get("backdrop_path"),
+            r.get("imdb_id"),r.get("comparison_status"),r.get("proposed_filename"),
             r.get("score"),movie_id,
         ))
 

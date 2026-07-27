@@ -15,6 +15,7 @@ from plexai_verify.app.paths import DATA_DIR
 from plexai_verify.app.dna_repository import get_signature
 from plexai_verify.app.database import get_movie, get_connection
 from plexai_verify.app.media_support import media_kind
+from plexai_verify.app.movie_inspector_model import build_summary
 from plexai_verify.app.validation_engine import ValidationEngine
 from plexai_verify.core.services.confidence_service import ConfidenceService
 from plexai_verify.core.services.correction_service import CorrectionService
@@ -57,9 +58,11 @@ class MovieDialog(QDialog):
         fresh = get_movie(movie["id"])
         self.movie = dict(fresh) if fresh else dict(movie)
         self.corrections = CorrectionService()
-        self.validation = ValidationEngine().evaluate(self.movie, bool(get_signature(self.movie["id"])))
+        self.has_dna = bool(get_signature(self.movie["id"]))
+        self.validation = ValidationEngine().evaluate(self.movie, self.has_dna)
+        self.summary = build_summary(self.movie, self.has_dna)
         title = self.movie.get("tmdb_title") or self.movie.get("ai_title") or self.movie.get("filename") or "Film Inspector"
-        self.setWindowTitle(f"{title} — PlexAI Verify Enterprise UX 2027")
+        self.setWindowTitle(f"{title} — Film Inspector 2.0")
         self.resize(1320, 900)
         self.setMinimumSize(1050, 700)
         self.setStyleSheet("""
@@ -86,6 +89,7 @@ class MovieDialog(QDialog):
 
         tabs = QTabWidget()
         tabs.addTab(self._build_overview_tab(), "Vue générale")
+        tabs.addTab(self._build_metadata_tab(), "Métadonnées")
         tabs.addTab(self._build_technical_tab(), "Technique")
         tabs.addTab(self._build_explanation_tab(), "Pourquoi ce titre ?")
         tabs.addTab(self._build_history_tab(), "Historique")
@@ -101,6 +105,9 @@ class MovieDialog(QDialog):
         poster_path = self.movie.get("tmdb_poster") or ""
         if poster_path and Path(str(poster_path)).exists():
             pixmap=QPixmap(str(poster_path)); poster.setPixmap(pixmap.scaled(170,250,Qt.KeepAspectRatio,Qt.SmoothTransformation))
+        elif poster_path:
+            poster.setText("AFFICHE TMDB\nÀ METTRE EN CACHE")
+            poster.setToolTip(str(poster_path))
         else: poster.setText("AFFICHE\nNON DISPONIBLE")
         row.addWidget(poster)
 
@@ -129,9 +136,9 @@ class MovieDialog(QDialog):
 
         scorebox=QFrame(); scorebox.setFixedWidth(215); scorebox.setStyleSheet("background:#12161e;border:1px solid #2e3545;border-radius:12px;")
         sl=QVBoxLayout(scorebox); sl.setAlignment(Qt.AlignCenter)
-        score=QLabel(str(int(self.movie.get('quality_score') or 0))); score.setAlignment(Qt.AlignCenter); score.setStyleSheet("font-size:48px;font-weight:950;color:#e5a00d;")
+        score=QLabel(str(self.summary.health_score)); score.setAlignment(Qt.AlignCenter); score.setStyleSheet("font-size:48px;font-weight:950;color:#e5a00d;")
         sl.addWidget(QLabel("MOVIE HEALTH SCORE", alignment=Qt.AlignCenter)); sl.addWidget(score); sl.addWidget(QLabel("/ 100", alignment=Qt.AlignCenter))
-        edition=QLabel(self._edition_label(), alignment=Qt.AlignCenter); edition.setWordWrap(True); edition.setStyleSheet("padding:7px;background:#222936;border-radius:7px;font-weight:800;")
+        edition=QLabel(self.summary.edition_label, alignment=Qt.AlignCenter); edition.setWordWrap(True); edition.setStyleSheet("padding:7px;background:#222936;border-radius:7px;font-weight:800;")
         sl.addWidget(edition)
         row.addWidget(scorebox)
         return hero
@@ -162,8 +169,8 @@ class MovieDialog(QDialog):
         items=[
             ("Format",kind,"Conteneur média"),("Durée",_duration(self.movie.get("duration")),"Durée FFprobe"),
             ("Taille",f"{(self.movie.get('filesize') or 0)/1_073_741_824:.2f} Go","Poids du fichier"),("État",status,"Diagnostic actuel"),
-            ("Vidéo",f"{_value(self.movie.get('height'))}p • {_value(self.movie.get('video_codec'))}",_value(self.movie.get('hdr'))),
-            ("Audio",f"{_value(self.movie.get('audio_codec'))} • {_value(self.movie.get('audio_channels'))}",_value(self.movie.get('audio_languages'))),
+            ("Vidéo",f"{self.summary.resolution_label} • {_value(self.movie.get('video_codec'))}",_value(self.movie.get('hdr'))),
+            ("Audio",self.summary.audio_label,_value(self.movie.get('audio_channels'))),
         ]
         for i,(t,v,d) in enumerate(items): grid.addWidget(self._metric_card(t,v,d),i//3,i%3)
         layout.addLayout(grid)
@@ -187,6 +194,29 @@ class MovieDialog(QDialog):
         notes=QFrame(); notes.setStyleSheet(self.CARD); nl=QVBoxLayout(notes); nl.addWidget(QLabel("SYNTHÈSE IA", styleSheet="font-size:16px;font-weight:900;"))
         text=QTextEdit(); text.setReadOnly(True); text.setMaximumHeight(120); text.setPlainText(self.movie.get("ai_notes") or self.movie.get("comparison_message") or "Aucune justification enregistrée."); nl.addWidget(text); layout.addWidget(notes)
         path=QLabel(f"<b>Chemin du média</b><br>{self.movie.get('filepath') or '—'}"); path.setWordWrap(True); path.setTextInteractionFlags(Qt.TextSelectableByMouse); path.setStyleSheet("padding:12px;background:#151923;border-radius:9px;"); layout.addWidget(path)
+        layout.addStretch(); return self._scroll_tab(body)
+
+    def _build_metadata_tab(self):
+        body=QWidget(); layout=QVBoxLayout(body); layout.setSpacing(12)
+        heading=QLabel("INFORMATIONS DU FILM"); heading.setStyleSheet("font-size:20px;font-weight:950;"); layout.addWidget(heading)
+        synopsis=QTextEdit(); synopsis.setReadOnly(True); synopsis.setMinimumHeight(145)
+        synopsis.setPlainText(self.movie.get("tmdb_overview") or "Synopsis indisponible. Lance la comparaison TMDB pour enrichir cette fiche.")
+        layout.addWidget(synopsis)
+        grid=QGridLayout(); grid.setSpacing(10)
+        details=[
+            ("Titre français", self.movie.get("tmdb_title") or "—"),
+            ("Titre original", self.movie.get("tmdb_original_title") or "—"),
+            ("Date de sortie", self.movie.get("tmdb_release_date") or self.movie.get("tmdb_year") or "—"),
+            ("Réalisateur", self.movie.get("tmdb_director") or "—"),
+            ("Genres", self.movie.get("tmdb_genres") or "—"),
+            ("Note TMDB", f"{float(self.movie.get('tmdb_vote_average') or 0):.1f} / 10" if self.movie.get("tmdb_vote_average") else "—"),
+            ("Identifiant TMDB", self.movie.get("tmdb_id") or "—"),
+            ("Identifiant IMDb", self.movie.get("imdb_id") or "—"),
+        ]
+        for i,(title,value) in enumerate(details): grid.addWidget(self._metric_card(title,value),i//2,i%2)
+        layout.addLayout(grid)
+        cast=QFrame(); cast.setStyleSheet(self.CARD); cl=QVBoxLayout(cast); cl.addWidget(QLabel("DISTRIBUTION PRINCIPALE", styleSheet="font-size:16px;font-weight:900;"))
+        cast_label=QLabel(self.movie.get("tmdb_cast") or "Distribution indisponible."); cast_label.setWordWrap(True); cast_label.setStyleSheet(self.MUTED); cl.addWidget(cast_label); layout.addWidget(cast)
         layout.addStretch(); return self._scroll_tab(body)
 
     def _build_technical_tab(self):
