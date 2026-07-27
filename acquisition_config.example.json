@@ -1,0 +1,15 @@
+{
+  "radarr": {
+    "enabled": false,
+    "url": "http://localhost:7878",
+    "api_key": "",
+    "root_folder": "/films",
+    "quality_profile_id": 1,
+    "monitor": "movieOnly",
+    "search_on_add": true
+  },
+  "web_search": {
+    "enabled": true,
+    "url_template": "https://www.google.com/search?q={query}"
+  }
+}

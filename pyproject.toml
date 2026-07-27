@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plexai-verify-enterprise"
+version = "2027.2.0"
+description = "Centre de contrôle local et intelligent pour bibliothèques Plex"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "PySide6>=6.8,<7",
+  "openpyxl>=3.1,<4",
+  "Pillow>=10,<12",
+  "ImageHash>=4.3,<5",
+  "requests>=2.32",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<9",
+  "ruff>=0.6,<1",
+  "mypy>=1.11,<2",
+  "pyinstaller>=6,<7",
+  "build>=1.2,<2",
+]
+
+[project.scripts]
+plexai-verify = "plexai_verify.__main__:main"
+plexai-verify-cli = "plexai_verify.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["plexai_verify*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = ["build", "dist", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+ignore = ["E501"]
